@@ -1,12 +1,12 @@
 CXX = g++
-CXXFLAGS = -O3 -std=c++17 -pthread
-LDFLAGS = -lsecp256k1 -lssl -lcrypto -pthread
+CXXFLAGS = -O3 -std=c++17 -pthread -fopenmp
+LDFLAGS = -lsecp256k1 -lssl -lcrypto -pthread -fopenmp
 TARGET = vaultwatch
 OBJS = main.o
 
 all: $(TARGET)
 
-main.o: main.cpp targets.h check.h
+main.o: main.cpp targets.h
 	$(CXX) $(CXXFLAGS) -c main.cpp -o main.o
 
 $(TARGET): main.o
