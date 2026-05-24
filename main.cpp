@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // Process keys in batches
+    // Process keys — live tail mode: reads file as it grows
     const uint64_t BATCH = 1000000; // 1M keys per buffer
     uint8_t *buf = (uint8_t *)malloc(BATCH * 32);
     if (!buf) { fprintf(stderr, "vaultwatch: malloc failed\n"); return 1; }
@@ -85,29 +85,39 @@ int main(int argc, char **argv) {
     uint64_t found = 0;
     uint64_t reported = 0;
 
-    while (!feof(in) && !ferror(in)) {
+    while (1) {
+        // Try to read a batch
+        clearerr(in);
         uint64_t read = fread(buf, 32, BATCH, in);
-        if (read == 0) break;
 
-        for (uint64_t i = 0; i < read; i++) {
-            int res = check_privkey_multi(ctx, buf + i * 32);
-            if (res) {
-                found++;
-                // Log to stdout (machine-readable)
-                printf("FOUND key=");
-                for (int j = 0; j < 32; j++) printf("%02x", buf[i * 32 + j]);
-                printf(" target=%d\n", res);
-                fflush(stdout);
+        if (read > 0) {
+            for (uint64_t i = 0; i < read; i++) {
+                int res = check_privkey_multi(ctx, buf + i * 32);
+                if (res) {
+                    found++;
+                    printf("FOUND key=");
+                    for (int j = 0; j < 32; j++) printf("%02x", buf[i * 32 + j]);
+                    printf(" target=%d\n", res);
+                    fflush(stdout);
+                }
             }
-        }
+            total += read;
 
-        total += read;
-
-        // Progress every 10M keys
-        if (total - reported >= 10000000) {
-            fprintf(stderr, "[vaultwatch] %llu keys checked, %llu found\n",
-                    (unsigned long long)total, (unsigned long long)found);
-            reported = total;
+            if (total - reported >= 10000000) {
+                fprintf(stderr, "[vaultwatch] %llu keys checked, %llu found\n",
+                        (unsigned long long)total, (unsigned long long)found);
+                reported = total;
+            }
+        } else {
+            // No new data — wait or stop
+            if (keypath) {
+                // File mode: sleep and retry (live tail)
+                fflush(in);
+                usleep(500000); // 500ms
+            } else {
+                // Pipe mode: EOF means done
+                break;
+            }
         }
     }
 
