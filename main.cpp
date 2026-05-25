@@ -329,27 +329,32 @@ int main(int argc, char **argv) {
                         if (safe_delete > cur_total) safe_delete = cur_total;
                         uint64_t remaining = cur_total - safe_delete;
 
-                        // If generator added new keys since we checked, keep them
-                        uint64_t new_fsize_disk = (fsize > safe_delete * 32) ? (fsize - safe_delete * 32) : 0;
-                        // Actually, remap correctly:
                         if (remaining > 0) {
-                            // Read remaining keys, write them back
-                            uint8_t *tmp = (uint8_t*)malloc(remaining * 32);
-                            if (tmp) {
-                                memcpy(tmp, data + safe_delete * 32, remaining * 32);
-                                ftruncate(fd, remaining * 32);
-                                // Rewrite
-                                FILE *fw = fopen(keypath, "wb");
-                                if (fw) {
-                                    fwrite(tmp, 32, remaining, fw);
-                                    fclose(fw);
-                                }
-                                free(tmp);
+                            // memcpy only what we can actually read from data
+                            uint64_t copy_bytes = (remaining * 32 < fsize - safe_delete * 32) ? remaining * 32 : fsize - safe_delete * 32;
+                            uint8_t *tmp = (uint8_t*)malloc(copy_bytes);
+                            if (tmp && data != (uint8_t*)MAP_FAILED) {
+                                memcpy(tmp, data + safe_delete * 32, copy_bytes);
                             }
+                            close(fd);
+                            // Remove old checked portion, rewrite remaining
+                            FILE *fw = fopen(keypath, "wb");
+                            if (fw && tmp && data != (uint8_t*)MAP_FAILED) {
+                                fwrite(tmp, 1, copy_bytes, fw);
+                                ftruncate(fileno(fw), copy_bytes);
+                                fclose(fw);
+                            } else {
+                                ftruncate(fd, 0);
+                            }
+                            if (tmp) free(tmp);
                         } else {
-                            ftruncate(fd, 0);
+                            close(fd);
+                            FILE *fw = fopen(keypath, "wb");
+                            if (fw) {
+                                ftruncate(fileno(fw), 0);
+                                fclose(fw);
+                            }
                         }
-                        close(fd);
 
                         // Remap safely
                         if (data != (uint8_t*)MAP_FAILED) munmap(data, fsize);
