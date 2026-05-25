@@ -315,7 +315,7 @@ int main(int argc, char **argv) {
             }
 
             if (found > 0) break;
-            sleep(60); // Wait before re-checking for new keys
+            sleep(5); // Quick re-check for new keys
         }
 
         if (data != MAP_FAILED) munmap(data, fsize);
