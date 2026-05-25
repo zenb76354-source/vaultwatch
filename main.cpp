@@ -127,6 +127,7 @@ int main(int argc, char **argv) {
     }
 
     uint64_t total = 0, found = 0;
+    double start_time = (double)time(NULL);
 
     if (pipe_mode) {
         fprintf(stderr, "[vaultwatch] Reading from stdin (pipe).\n");
@@ -134,7 +135,7 @@ int main(int argc, char **argv) {
         uint8_t *buf = (uint8_t*)malloc(B * 32);
         if (!buf) { fprintf(stderr, "malloc failed\n"); return 1; }
 
-        uint64_t done=0, reported=0;
+        uint64_t done=0, next_progress=100000;
         while (!feof(stdin)) {
             uint64_t r = fread(buf, 32, B, stdin);
             if (r == 0) break;
@@ -146,15 +147,23 @@ int main(int argc, char **argv) {
             }
 
             done += r;
-            if (done - reported >= 10000000) {
-                fprintf(stderr, "[vaultwatch] %llu keys checked, %llu found\n",
-                        (unsigned long long)done, (unsigned long long)found);
-                reported = done;
+            if (done >= next_progress) {
+                double elapsed = (double)time(NULL) - start_time;
+                double rate = elapsed > 0.0 ? (double)done / elapsed : 0.0;
+                double rate_k = rate / 1000.0;
+                int pct = total > 0 ? (int)(100.0 * done / total) : 0;
+                // In pipe mode we don't know total, show keys only
+                fprintf(stderr, "\r[vaultwatch] %llu keys checked | %.0f k/s | %.0fs elapsed | %llu found   ",
+                        (unsigned long long)done, rate_k, elapsed, (unsigned long long)found);
+                if (next_progress < 10000000) next_progress += 100000;
+                else if (next_progress < 100000000) next_progress += 1000000;
+                else next_progress += 10000000;
             }
         }
         free(buf);
-        fprintf(stderr, "[vaultwatch] Done. %llu keys, %llu found.\n",
-                (unsigned long long)total, (unsigned long long)found);
+        fprintf(stderr, "\n[vaultwatch] Done. %llu keys checked, %llu found (%.0f sec).\n",
+                (unsigned long long)total, (unsigned long long)found,
+                (double)time(NULL) - start_time);
     }
     else if (keypath) {
         // Retry loop: wait for file to appear if it doesn't exist yet
@@ -180,6 +189,7 @@ int main(int argc, char **argv) {
 
         uint64_t offset = 0;
         uint64_t last_delete_time = 0;
+        uint64_t progress_counter = 0;
 
         // Main loop: keep re-checking as file grows
         while (1) {
@@ -215,12 +225,15 @@ int main(int argc, char **argv) {
             }
 
             uint64_t batch_total = total - offset;
-            fprintf(stderr, "[vaultwatch] Checking %llu keys (offset=%llu, total=%llu)...\n",
-                    (unsigned long long)batch_total, (unsigned long long)offset, (unsigned long long)total);
+            double batch_start = (double)time(NULL);
+            fprintf(stderr, "\n[vaultwatch] Batch: %llu new keys (total file: %llu keys)\n",
+                    (unsigned long long)batch_total, (unsigned long long)total);
 
             const uint64_t CHUNK = 5000000;
             uint64_t batch_found = 0;
             int found_any = 0;
+            uint64_t done_in_batch = 0;
+            uint64_t next_progress = 500000;
 
             #pragma omp parallel for reduction(+:batch_found) schedule(dynamic, 1)
             for (uint64_t off = offset; off < total; off += CHUNK) {
@@ -229,21 +242,49 @@ int main(int argc, char **argv) {
                 for (uint64_t i = off; i < end; i++) {
                     if (check_one(ctx, data + i*32)) batch_found++;
                 }
+                #pragma omp critical
+                {
+                    done_in_batch += (end - off);
+                    progress_counter += (end - off);
+                    if (done_in_batch >= next_progress || done_in_batch >= batch_total) {
+                        double batch_elapsed = (double)time(NULL) - batch_start;
+                        double total_elapsed = (double)time(NULL) - start_time;
+                        double rate = batch_elapsed > 0.0 ? (double)done_in_batch / batch_elapsed : 0.0;
+                        double rate_k = rate / 1000.0;
+                        uint64_t remain = done_in_batch < batch_total ? batch_total - done_in_batch : 0;
+                        double eta = rate > 0.0 && remain > 0 ? (double)remain / rate : 0.0;
+                        double pct = 100.0 * done_in_batch / batch_total;
+                        int c = progress_counter;
+                        fprintf(stderr,
+                            "\r[vaultwatch] [%5.1f%%] %llu/%llu keys | %.0f k/s | elapsed %ds | ETA %ds | found=%llu   "
+                            , pct
+                            , (unsigned long long)done_in_batch, (unsigned long long)batch_total
+                            , rate_k
+                            , (int)batch_elapsed, (int)eta
+                            , (unsigned long long)batch_found);
+                        fflush(stderr);
+                        if (next_progress < 10000000) next_progress += 500000;
+                        else next_progress += 5000000;
+                    }
+                }
             }
 
             if (batch_found > 0) found_any = 1;
             found += batch_found;
 
             if (found_any) {
-                fprintf(stderr, "\n*** FOUND %llu KEYS! ***\n"
+                fprintf(stderr, "\n\n*** FOUND %llu KEYS! ***\n"
                         "Stopping check to protect discovery.\n"
                         "Found keys logged in found.txt\n\n",
                         (unsigned long long)batch_found);
                 break;
             }
 
-            fprintf(stderr, "[vaultwatch] %llu keys checked (%llu found total).\n",
-                    (unsigned long long)total, (unsigned long long)found);
+            double batch_done = (double)time(NULL) - batch_start;
+            double total_elapsed = (double)time(NULL) - start_time;
+            fprintf(stderr, "\n[vaultwatch] Batch done: %llu keys in %.0f sec | total: %llu keys checked in %.0f sec\n",
+                    (unsigned long long)batch_total, batch_done,
+                    (unsigned long long)total, total_elapsed);
 
             offset = total;
             uint64_t now = (uint64_t)time(NULL);
