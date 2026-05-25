@@ -289,13 +289,25 @@ int main(int argc, char **argv) {
             offset = total;
             uint64_t now = (uint64_t)time(NULL);
 
-            // Auto-delete: check if enough time passed
-            if (auto_delete > 0 && total > 0) {
-                if (last_delete_time == 0) {
-                    last_delete_time = now;
+            // Auto-delete: delete immediately after each batch, or wait if auto_delete > 0
+            if (auto_delete >= 0 && total > 0) {
+                int do_delete = 0;
+                if (auto_delete == 0) {
+                    // Immediate delete after each batch
+                    do_delete = 1;
+                } else {
+                    if (last_delete_time == 0) {
+                        last_delete_time = now;
+                    }
+                    if (now - last_delete_time >= (uint64_t)auto_delete) {
+                        do_delete = 1;
+                    } else {
+                        uint64_t remaining_sec = (uint64_t)auto_delete - (now - last_delete_time);
+                        fprintf(stderr, "[vaultwatch] Next auto-delete in %llu seconds.\n",
+                                (unsigned long long)remaining_sec);
+                    }
                 }
-
-                if (now - last_delete_time >= (uint64_t)auto_delete) {
+                if (do_delete) {
                     fprintf(stderr, "[vaultwatch] Auto-delete: trimming %llu checked keys...\n",
                             (unsigned long long)offset);
 
