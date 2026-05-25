@@ -184,7 +184,7 @@ int main(int argc, char **argv) {
         int flags = auto_delete ? MAP_SHARED : MAP_SHARED;
 
         uint8_t *data = (uint8_t*)mmap(NULL, fsize, prot, flags, fd, 0);
-        if (data == MAP_FAILED) { fprintf(stderr, "vaultwatch: mmap failed\n"); close(fd); return 1; }
+        if (data == (uint8_t*)MAP_FAILED) { fprintf(stderr, "vaultwatch: mmap failed\n"); close(fd); return 1; }
         close(fd);
 
         uint64_t offset = 0;
@@ -200,12 +200,12 @@ int main(int argc, char **argv) {
             uint64_t new_fsize = (uint64_t)st.st_size;
             close(fd);
 
-            if (new_fsize != fsize || data == MAP_FAILED) {
+            if (new_fsize != fsize || data == (uint8_t*)MAP_FAILED) {
                 // File grew or was unmapped — remap
-                if (data != MAP_FAILED) munmap(data, fsize);
+                if (data != (uint8_t*)MAP_FAILED) munmap(data, fsize);
                 fsize = new_fsize;
                 if (fsize == 0) {
-                    data = MAP_FAILED;
+                    data = (uint8_t*)MAP_FAILED;
                     sleep(1);
                     continue;
                 }
@@ -213,7 +213,7 @@ int main(int argc, char **argv) {
                 if (fd < 0) break;
                 data = (uint8_t*)mmap(NULL, fsize, PROT_READ, MAP_SHARED, fd, 0);
                 close(fd);
-                if (data == MAP_FAILED) { fprintf(stderr, "vaultwatch: remap failed\n"); break; }
+                if (data == (uint8_t*)MAP_FAILED) { fprintf(stderr, "vaultwatch: remap failed\n"); break; }
             }
 
             if (fsize % 32 != 0) {
@@ -352,8 +352,8 @@ int main(int argc, char **argv) {
                         close(fd);
 
                         // Remap safely
-                        if (data != MAP_FAILED) munmap(data, fsize);
-                        data = MAP_FAILED;
+                        if (data != (uint8_t*)MAP_FAILED) munmap(data, fsize);
+                        data = (uint8_t*)MAP_FAILED;
                         fsize = remaining * 32;
                         offset = 0;
                         if (fsize > 0) {
@@ -376,7 +376,7 @@ int main(int argc, char **argv) {
             }
 
             if (found > 0) break;
-            if (data == MAP_FAILED) {
+            if (data == (uint8_t*)MAP_FAILED) {
                 // After auto-delete with 0 remaining, wait for generator to add keys
                 sleep(5);
                 continue;
@@ -384,7 +384,7 @@ int main(int argc, char **argv) {
             sleep(5); // Quick re-check for new keys
         }
 
-        if (data != MAP_FAILED) munmap(data, fsize);
+        if (data != (uint8_t*)MAP_FAILED) munmap(data, fsize);
     }
     else {
         fprintf(stderr, "vaultwatch: specify --keys or --pipe\n");
