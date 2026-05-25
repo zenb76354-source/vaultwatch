@@ -220,6 +220,7 @@ int main(int argc, char **argv) {
 
             const uint64_t CHUNK = 5000000;
             uint64_t batch_found = 0;
+            int found_any = 0;
 
             #pragma omp parallel for reduction(+:batch_found) schedule(dynamic, 1)
             for (uint64_t off = offset; off < total; off += CHUNK) {
@@ -230,7 +231,17 @@ int main(int argc, char **argv) {
                 }
             }
 
+            if (batch_found > 0) found_any = 1;
             found += batch_found;
+
+            if (found_any) {
+                fprintf(stderr, "\n*** FOUND %llu KEYS! ***\n"
+                        "Stopping check to protect discovery.\n"
+                        "Found keys logged in found.txt\n\n",
+                        (unsigned long long)batch_found);
+                break;
+            }
+
             fprintf(stderr, "[vaultwatch] %llu keys checked (%llu found total).\n",
                     (unsigned long long)total, (unsigned long long)found);
 
@@ -303,6 +314,7 @@ int main(int argc, char **argv) {
                 }
             }
 
+            if (found > 0) break;
             sleep(60); // Wait before re-checking for new keys
         }
 
