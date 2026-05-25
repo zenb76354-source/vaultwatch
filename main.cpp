@@ -200,13 +200,18 @@ int main(int argc, char **argv) {
             uint64_t new_fsize = (uint64_t)st.st_size;
             close(fd);
 
-            if (new_fsize != fsize) {
-                // File grew — remap
-                munmap(data, fsize);
+            if (new_fsize != fsize || data == MAP_FAILED) {
+                // File grew or was unmapped — remap
+                if (data != MAP_FAILED) munmap(data, fsize);
                 fsize = new_fsize;
+                if (fsize == 0) {
+                    data = MAP_FAILED;
+                    sleep(1);
+                    continue;
+                }
                 fd = open(keypath, O_RDWR, 0644);
                 if (fd < 0) break;
-                data = (uint8_t*)mmap(NULL, fsize, prot, flags, fd, 0);
+                data = (uint8_t*)mmap(NULL, fsize, PROT_READ, MAP_SHARED, fd, 0);
                 close(fd);
                 if (data == MAP_FAILED) { fprintf(stderr, "vaultwatch: remap failed\n"); break; }
             }
@@ -346,14 +351,17 @@ int main(int argc, char **argv) {
                         }
                         close(fd);
 
-                        // Remap
-                        munmap(data, fsize);
+                        // Remap safely
+                        if (data != MAP_FAILED) munmap(data, fsize);
+                        data = MAP_FAILED;
                         fsize = remaining * 32;
                         offset = 0;
-                        fd = open(keypath, O_RDWR, 0644);
-                        if (fd >= 0) {
-                            data = (uint8_t*)mmap(NULL, fsize, prot, flags, fd, 0);
-                            close(fd);
+                        if (fsize > 0) {
+                            fd = open(keypath, O_RDWR, 0644);
+                            if (fd >= 0) {
+                                data = (uint8_t*)mmap(NULL, fsize, PROT_READ, MAP_SHARED, fd, 0);
+                                close(fd);
+                            }
                         }
                         fprintf(stderr, "[vaultwatch] Trimmed. Remaining: %llu keys.\n",
                                 (unsigned long long)(fsize / 32));
@@ -368,6 +376,11 @@ int main(int argc, char **argv) {
             }
 
             if (found > 0) break;
+            if (data == MAP_FAILED) {
+                // After auto-delete with 0 remaining, wait for generator to add keys
+                sleep(5);
+                continue;
+            }
             sleep(5); // Quick re-check for new keys
         }
 
