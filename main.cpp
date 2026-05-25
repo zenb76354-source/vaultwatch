@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <ctime>
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
