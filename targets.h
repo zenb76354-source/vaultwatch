@@ -42,7 +42,7 @@ static const char *TARGET_LABELS[NUM_TARGETS] = {
 };
 
 static const double TARGET_BALANCE[NUM_TARGETS] = {
-    400.0, 9260.0, 400.0, 200.0, 200.0, 1200.0, 200.0, 250.0
+    400.0, 9260.0, 400.0, 200.0, 200.0, 1200.0, 200.0, 8000.0
 };
 
 #endif /* TARGETS_H */

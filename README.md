@@ -35,9 +35,6 @@ make
 
 # Pipe from SeedHammer
 ./seedhammer --mode h36 --start 1223424000000 --count 50000000 --out - | ./vaultwatch --pipe
-
-# Check specific hypothesis
-./vaultwatch --keys keys.bin --hypothesis H36
 ```
 
 ## Input Format
@@ -58,7 +55,7 @@ Eight addresses from the 2009-2010 era, ~$150M+ at peak:
 | 5 | A5 | 2010-07-17 | 200 BTC |
 | 6 | A6 | 2010-09-10 | 1200 BTC |
 | 7 | A7 | 2010-09-16 | 200 BTC |
-| 8 | E1 | 2009 | 250 BTC |
+| 8 | E1 | 2009 | 8000 BTC |
 
 *A2 is a known dust collector (active 2020+) — included anyway.*
 
