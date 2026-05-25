@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <cstring>
 
-#define NUM_TARGETS 8
+#define NUM_TARGETS 9
 
 static const char *TARGET_ADDRS[NUM_TARGETS] = {
     "12rMpw5HnEvAw3nQqLmRBCQyuktfpa4eVw",
@@ -14,7 +14,8 @@ static const char *TARGET_ADDRS[NUM_TARGETS] = {
     "1DTy9z4JvtqYsg44oagVpHqyQpF7ZLLs45",
     "1MVLP2kRPNqz8VJUy83LstUoMQzUjgq4Zg",
     "15QezNwA5ThiPf7wo89TTnfBwny93VQFTp",
-    "198aMn6ZYAczwrE5NvNTUMyJ5qkfy4g3Hi"
+    "198aMn6ZYAczwrE5NvNTUMyJ5qkfy4g3Hi",
+    "TEST-KEY-1"
 };
 
 // Hash160 for each target (20 bytes) — verified correct
@@ -35,14 +36,16 @@ static const uint8_t TARGET_H160[NUM_TARGETS][20] = {
      0x0d,0xa3,0xfa,0x7e,0x69,0xfa,0xb4,0x07,0x64,0x9d},
     {0x59,0x2f,0xc3,0x99,0x00,0x26,0x33,0x4c,0x8c,0x6f,
      0xb2,0xb9,0xda,0x45,0x71,0x79,0xcd,0xb5,0xc6,0x88},
+    {0x75,0x1e,0x76,0xe8,0x19,0x91,0x96,0xd4,0x54,0x94,
+     0x1c,0x45,0xd1,0xb3,0xa3,0x23,0xf1,0x43,0x3b,0xd6},
 };
 
 static const char *TARGET_LABELS[NUM_TARGETS] = {
-    "A1", "A2", "A3", "A4", "A5", "A6", "A7", "E1"
+    "A1", "A2", "A3", "A4", "A5", "A6", "A7", "E1", "T1"
 };
 
 static const double TARGET_BALANCE[NUM_TARGETS] = {
-    400.0, 9260.0, 400.0, 200.0, 200.0, 1200.0, 200.0, 8000.0
+    400.0, 9260.0, 400.0, 200.0, 200.0, 1200.0, 200.0, 8000.0, 0.0
 };
 
 #endif /* TARGETS_H */
