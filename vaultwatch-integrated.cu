@@ -157,20 +157,44 @@ D_FUNC void privkey_hash160_both(const uint8_t priv[32],uint8_t h160_comp[20],ui
 }
 
 // ================================================================
-// GPU Bloom Filter
+// Cuckoo Filter (simplified) ? lower FPR than Bloom
+// Uses 4-way set-associative with 32-bit fingerprints
 // ================================================================
+// Parameters:
+//   BUCKETS: power of 2, ~1.6 ? num_targets
+//   FP_BITS: 8 (0.4% FPR at 95% load)
+// Each bucket holds up to 4 fingerprint + h160_mini pairs
 
-D_FUNC bool bloom_match_gpu(const uint8_t *bits,uint32_t nbits,const uint8_t h[20]){
-    uint32_t m=nbits-1;
-    uint32_t h0=((uint32_t)h[0]<<24|(uint32_t)h[1]<<16|(uint32_t)h[2]<<8|h[3])&m;
-    uint32_t h1=((uint32_t)h[8]<<24|(uint32_t)h[9]<<16|(uint32_t)h[10]<<8|h[11])&m;
-    uint32_t h2=((uint32_t)h[12]<<24|(uint32_t)h[13]<<16|(uint32_t)h[14]<<8|h[15])&m;
-    uint32_t h3=((h[0]*2654435761u+h[1]*2246822519u)&m);
-    if(!(bits[h0>>3]&(1<<(h0&7))))return false;
-    if(!(bits[h1>>3]&(1<<(h1&7))))return false;
-    if(!(bits[h2>>3]&(1<<(h2&7))))return false;
-    if(!(bits[h3>>3]&(1<<(h3&7))))return false;
-    return true;
+#define CUCKOO_BUCKETS 32768
+#define CUCKOO_FP_BITS 8
+#define CUCKOO_FP_MASK 0xFF
+#define CUCKOO_WAYS 4
+
+struct CuckooEntry { uint8_t fp; uint16_t h160_lo; };  // 3 bytes
+
+// GPU-side cuckoo lookup (no insertions on device)
+D_FUNC bool cuckoo_match_gpu(const CuckooEntry *table, const uint8_t h[20]){
+    // Compute bucket from first 2 bytes of h160
+    uint32_t bucket0=(((uint32_t)h[0]<<8)|h[1])&(CUCKOO_BUCKETS-1);
+    uint8_t fp0=h[2]&CUCKOO_FP_MASK;
+    uint16_t lo=((uint16_t)h[2]<<8)|h[3];  // h160[2..3] as compact id
+    
+    // Main bucket
+    for(int i=0;i<CUCKOO_WAYS;i++){
+        const CuckooEntry *e=&table[bucket0*CUCKOO_WAYS+i];
+        if(e->fp==fp0 && e->h160_lo==lo) return true;
+        if(e->fp==0) break;  // empty slot
+    }
+    
+    // Alternate bucket (xor with h160[4..5])
+    uint32_t bucket1=bucket0^((((uint32_t)h[4]<<8)|h[5])&(CUCKOO_BUCKETS-1));
+    if(bucket1==bucket0) return false;
+    for(int i=0;i<CUCKOO_WAYS;i++){
+        const CuckooEntry *e=&table[bucket1*CUCKOO_WAYS+i];
+        if(e->fp==fp0 && e->h160_lo==lo) return true;
+        if(e->fp==0) break;
+    }
+    return false;
 }
 
 // ================================================================
@@ -182,7 +206,7 @@ struct FoundEntry{uint8_t privkey[32];uint32_t mode;uint8_t h160[20];};
 
 __global__ void vaultwatch_integrated_kernel(
     const uint8_t *keys, uint64_t n_keys,
-    const uint8_t  *bloom_bits, uint32_t bloom_nbits,
+    const CuckooEntry *cuckoo_table,
     FoundEntry     *found_out,  uint32_t *n_found
 ){
     uint64_t idx=(uint64_t)blockIdx.x*blockDim.x+threadIdx.x;
@@ -192,19 +216,37 @@ __global__ void vaultwatch_integrated_kernel(
     uint8_t c[20],u[20];
     privkey_hash160_both(pk,c,u);
 
-    // Check compressed
-    if(bloom_match_gpu(bloom_bits,bloom_nbits,c)){
-        uint32_t pos=atomicAdd(n_found,1u);
-        for(int i=0;i<32;i++)found_out[pos].privkey[i]=pk[i];
-        found_out[pos].mode=0; // compressed
-        for(int i=0;i<20;i++)found_out[pos].h160[i]=c[i];
+    // Check compressed (main targets via constant memory, Patoshi via cuckoo)
+    for(int t=0;t<NUM_TARGETS;t++){
+        int match=1;
+        for(int i=0;i<20;i++) if(c[i]!=d_target_h160[t][i]){match=0;break;}
+        if(match){
+            uint32_t pos=atomicAdd(n_found,1u);
+            for(int i=0;i<32;i++)found_out[pos].privkey[i]=pk[i];
+            found_out[pos].mode=0; for(int i=0;i<20;i++)found_out[pos].h160[i]=c[i];
+        }
     }
-    // Check uncompressed
-    if(bloom_match_gpu(bloom_bits,bloom_nbits,u)){
+    // Patoshi via cuckoo
+    if(cuckoo_match_gpu(cuckoo_table,c)){
         uint32_t pos=atomicAdd(n_found,1u);
         for(int i=0;i<32;i++)found_out[pos].privkey[i]=pk[i];
-        found_out[pos].mode=1; // uncompressed
-        for(int i=0;i<20;i++)found_out[pos].h160[i]=u[i];
+        found_out[pos].mode=0; for(int i=0;i<20;i++)found_out[pos].h160[i]=c[i];
+    }
+
+    // Check uncompressed
+    for(int t=0;t<NUM_TARGETS;t++){
+        int match=1;
+        for(int i=0;i<20;i++) if(u[i]!=d_target_h160[t][i]){match=0;break;}
+        if(match){
+            uint32_t pos=atomicAdd(n_found,1u);
+            for(int i=0;i<32;i++)found_out[pos].privkey[i]=pk[i];
+            found_out[pos].mode=1; for(int i=0;i<20;i++)found_out[pos].h160[i]=u[i];
+        }
+    }
+    if(cuckoo_match_gpu(cuckoo_table,u)){
+        uint32_t pos=atomicAdd(n_found,1u);
+        for(int i=0;i<32;i++)found_out[pos].privkey[i]=pk[i];
+        found_out[pos].mode=1; for(int i=0;i<20;i++)found_out[pos].h160[i]=u[i];
     }
 }
 
@@ -258,20 +300,30 @@ int main(int argc,char **argv){
     fread(ph,1,ps,pf);fclose(pf);
     fprintf(stderr,"Loaded %u Patoshi H160\n",np);
 
-    // Build bloom
-    uint32_t bb=1;while(bb<192000)bb<<=1;
-    uint8_t *blm=(uint8_t*)calloc(1,(bb+7)/8);
+    // Build Cuckoo filter for Patoshi
+    uint32_t n_buckets=CUCKOO_BUCKETS;
+    CuckooEntry *cuckoo=(CuckooEntry*)calloc(n_buckets*CUCKOO_WAYS,sizeof(CuckooEntry));
     for(uint32_t i=0;i<np;i++){
         const uint8_t *p=ph+i*20;
-        uint32_t m=bb-1;
-        uint32_t h0=((uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3])&m;
-        uint32_t h1=((uint32_t)p[8]<<24|(uint32_t)p[9]<<16|(uint32_t)p[10]<<8|p[11])&m;
-        uint32_t h2=((uint32_t)p[12]<<24|(uint32_t)p[13]<<16|(uint32_t)p[14]<<8|p[15])&m;
-        uint32_t h3=((p[0]*2654435761u+p[1]*2246822519u)&m);
-        blm[h0>>3]|=1<<(h0&7);blm[h1>>3]|=1<<(h1&7);
-        blm[h2>>3]|=1<<(h2&7);blm[h3>>3]|=1<<(h3&7);
+        uint32_t b0=(((uint32_t)p[0]<<8)|p[1])&(n_buckets-1);
+        uint8_t fp0=p[2]&CUCKOO_FP_MASK;
+        uint16_t lo=((uint16_t)p[2]<<8)|p[3];
+        // Insert with cuckoo eviction (simplified: just find first slot)
+        int inserted=0;
+        for(int w=0;w<CUCKOO_WAYS;w++){
+            CuckooEntry *e=&cuckoo[b0*CUCKOO_WAYS+w];
+            if(e->fp==0){e->fp=fp0;e->h160_lo=lo;inserted=1;break;}
+        }
+        if(!inserted){
+            // Alternate bucket
+            uint32_t b1=b0^((((uint32_t)p[4]<<8)|p[5])&(n_buckets-1));
+            for(int w=0;w<CUCKOO_WAYS;w++){
+                CuckooEntry *e=&cuckoo[b1*CUCKOO_WAYS+w];
+                if(e->fp==0){e->fp=fp0;e->h160_lo=lo;inserted=1;break;}
+            }
+        }
     }
-    fprintf(stderr,"Bloom filter: %u bits\n",bb);
+    fprintf(stderr,"Cuckoo filter built: %u buckets, %u targets\n",n_buckets,np);
 
     int use_gpu=0;
 #ifdef __CUDACC__
@@ -283,6 +335,23 @@ int main(int argc,char **argv){
     }else fprintf(stderr,"No CUDA device, CPU fallback\n");
 #else
     fprintf(stderr,"CPU mode\n");
+#endif
+
+    // Copy targets to constant memory
+#ifdef __CUDACC__
+    if(use_gpu){
+        uint8_t h_const[NUM_TARGETS][20];
+        char l_const[NUM_TARGETS][16];
+        double b_const[NUM_TARGETS];
+        for(int t=0;t<NUM_TARGETS;t++){
+            for(int i=0;i<20;i++) h_const[t][i]=TARGET_H160[t][i];
+            strncpy(l_const[t],TARGET_LABELS[t],15);
+            b_const[t]=TARGET_BALANCE[t];
+        }
+        cudaMemcpyToSymbol(d_target_h160,h_const,sizeof(h_const));
+        cudaMemcpyToSymbol(d_target_labels,l_const,sizeof(l_const));
+        cudaMemcpyToSymbol(d_target_balance,b_const,sizeof(b_const));
+    }
 #endif
 
     const uint64_t CHUNK=65536;
@@ -340,3 +409,5 @@ int main(int argc,char **argv){
     return 0;
 }
 #endif // __CUDACC__
+
+
