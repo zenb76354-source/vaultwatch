@@ -22,9 +22,9 @@
 #include "patoshi_targets.h"
 
 #ifdef __CUDACC__
-#define D_FUNC __device__
+#define __device__ __device__
 #else
-#define D_FUNC static
+#define __device__ static
 #endif
 
 // ================================================================
@@ -58,7 +58,7 @@ static const uint32_t K256[64]={
     0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
 };
 
-D_FUNC void sha256_compress(uint32_t s[8],const uint32_t b[16]){
+__device__ void sha256_compress(uint32_t s[8],const uint32_t b[16]){
     // ============================================================
     // SHA256 core — with REAL warp-level optimization
     // ============================================================
@@ -99,7 +99,7 @@ D_FUNC void sha256_compress(uint32_t s[8],const uint32_t b[16]){
     s[0]+=a;s[1]+=b2;s[2]+=c;s[3]+=d;s[4]+=e;s[5]+=f;s[6]+=g;s[7]+=h;
 }
 
-D_FUNC void sha256(const uint8_t *m,uint32_t len,uint8_t h[32]){
+__device__ void sha256(const uint8_t *m,uint32_t len,uint8_t h[32]){
     uint32_t s[8]={0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19};
     uint32_t blk[16]; uint64_t bits=(uint64_t)len*8; uint32_t idx=0;
     while(len>=64){
@@ -127,7 +127,7 @@ D_FUNC void sha256(const uint8_t *m,uint32_t len,uint8_t h[32]){
 static const uint32_t RMD_K[5]={0x00000000,0x5a827999,0x6ed9eba1,0x8f1bbcdc,0xa953fd4e};
 static const uint32_t RMD_KP[5]={0x50a28be6,0x5c4dd124,0x6d703ef3,0x7a6d76e9,0x00000000};
 
-D_FUNC void ripemd160(const uint8_t in[64],uint8_t out[20]){
+__device__ void ripemd160(const uint8_t in[64],uint8_t out[20]){
     uint32_t h[5]={0x67452301,0xefcdab89,0x98badcfe,0x10325476,0xc3d2e1f0},x[16];
     for(int i=0;i<16;i++)x[i]=(uint32_t)in[i*4]|(uint32_t)in[i*4+1]<<8|(uint32_t)in[i*4+2]<<16|(uint32_t)in[i*4+3]<<24;
     uint32_t a=h[0],b=h[1],c=h[2],d=h[3],e=h[4],ap=a,bp=b,cp=c,dp=d,ep=e;
@@ -153,7 +153,7 @@ D_FUNC void ripemd160(const uint8_t in[64],uint8_t out[20]){
 // HASH160: SHA256 -> RIPEMD160
 // ================================================================
 
-D_FUNC void hash160(const uint8_t *data,uint32_t len,uint8_t h160[20]){
+__device__ void hash160(const uint8_t *data,uint32_t len,uint8_t h160[20]){
     uint8_t sha[32]; sha256(data,len,sha);
     uint8_t rm[64];
     for(int i=0;i<32;i++)rm[i]=sha[i]; rm[32]=0x80;
@@ -167,7 +167,7 @@ D_FUNC void hash160(const uint8_t *data,uint32_t len,uint8_t h160[20]){
 // EC Multiply -> Both HASH160s (compressed + uncompressed)
 // ================================================================
 
-D_FUNC void privkey_hash160_both(const uint8_t priv[32],uint8_t h160_comp[20],uint8_t h160_uncomp[20]){
+__device__ void privkey_hash160_both(const uint8_t priv[32],uint8_t h160_comp[20],uint8_t h160_uncomp[20]){
     uint64_t k[4];
     k[0]=(uint64_t)priv[31]|(uint64_t)priv[30]<<8|(uint64_t)priv[29]<<16|(uint64_t)priv[28]<<24|(uint64_t)priv[27]<<32|(uint64_t)priv[26]<<40|(uint64_t)priv[25]<<48|(uint64_t)priv[24]<<56;
     k[1]=(uint64_t)priv[23]|(uint64_t)priv[22]<<8|(uint64_t)priv[21]<<16|(uint64_t)priv[20]<<24|(uint64_t)priv[19]<<32|(uint64_t)priv[18]<<40|(uint64_t)priv[17]<<48|(uint64_t)priv[16]<<56;
@@ -202,7 +202,7 @@ D_FUNC void privkey_hash160_both(const uint8_t priv[32],uint8_t h160_comp[20],ui
 struct CuckooEntry { uint8_t fp; uint16_t h160_lo; };  // 3 bytes
 
 // GPU-side cuckoo lookup (no insertions on device)
-D_FUNC bool cuckoo_match_gpu(const CuckooEntry *table, const uint8_t h[20]){
+__device__ bool cuckoo_match_gpu(const CuckooEntry *table, const uint8_t h[20]){
     // Compute bucket from first 2 bytes of h160
     uint32_t bucket0=(((uint32_t)h[0]<<8)|h[1])&(CUCKOO_BUCKETS-1);
     uint8_t fp0=h[2]&CUCKOO_FP_MASK;
@@ -506,7 +506,7 @@ int main(int argc,char **argv){
 __device__ volatile int g_stop_flag = 0;
 
 // Check if we should stop generation
-D_FUNC int should_stop(void){
+__device__ int should_stop(void){
 #if defined(__CUDA_ARCH__)
     return g_stop_flag;
 #else

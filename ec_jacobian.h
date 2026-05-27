@@ -409,7 +409,7 @@ INLINE void privkey_to_pubkey_both(const uint8_t priv[32],
 
 // Single Jacobian point addition step using warp collaboration
 // Thread with lane == bit_idx computes the contribution for that bit
-D_FUNC void point_mul_warp(const uint8_t privkey[32], uint8_t pubkey[33]){
+__device__ void point_mul_warp(const uint8_t privkey[32], uint8_t pubkey[33]){
     int lane = threadIdx.x & 31;
     
     // Generator point (secp256k1 G)
