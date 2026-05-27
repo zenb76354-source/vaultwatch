@@ -322,8 +322,7 @@ static void bloom_free(BloomFilter *bf) {
     if (bf) { free(bf->bits); free(bf); }
 }
 
-// ==================== CPU-only: HASH160 from privkey (host side) ====================
-#ifndef __CUDACC__
+// ==================== CPU-side helpers (used outside the kernel) ====================
 
 static void privkey_hash160_both_host(const uint8_t priv[32], 
                                        uint8_t h160_comp[20],
@@ -350,8 +349,6 @@ static bool patoshi_exact_check(const uint8_t *patoshi_h160s, uint32_t n_patoshi
     }
     return false;
 }
-
-#endif
 
 // ==================== ============================================================
 // ==================== CUDA KERNEL ===============================================
