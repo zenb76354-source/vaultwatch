@@ -358,18 +358,17 @@ int main(int argc,char **argv){
     uint8_t *h_keys=(uint8_t*)malloc(CHUNK*32);
     uint8_t *h_comp=(uint8_t*)malloc(CHUNK*20);
     uint8_t *h_uncomp=(uint8_t*)malloc(CHUNK*20);
-    uint8_t *d_keys=NULL;uint8_t *d_blm=NULL;
+    uint8_t *d_keys=NULL;CuckooEntry *d_cuckoo=NULL;
     FoundEntry *d_found=NULL;uint32_t *d_nf=NULL;
 #ifdef __CUDACC__
     if(use_gpu){cudaMalloc(&d_keys,CHUNK*32);
-        cudaMalloc(&d_blm,(bb+7)/8);cudaMemcpy(d_blm,blm,(bb+7)/8,cudaMemcpyHostToDevice);
+        cudaMalloc(&d_cuckoo,n_buckets*CUCKOO_WAYS*sizeof(CuckooEntry));cudaMemcpy(d_cuckoo,cuckoo,n_buckets*CUCKOO_WAYS*sizeof(CuckooEntry),cudaMemcpyHostToDevice);
         cudaMalloc(&d_found,1024*sizeof(FoundEntry));cudaMalloc(&d_nf,4);}
 #endif
 
-    uint64_t total=0;uint32_t found_total=0;size_t nr;
-    fprintf(stderr,"Reading keys from stdin...\n");
     while((nr=fread(h_keys,1,CHUNK*32,stdin))>0){
         uint64_t nk=nr/32;if(nk==0)break;
+        if(total<cp){total+=nk;continue;}
 #ifdef __CUDACC__
         if(use_gpu){
             cudaMemcpy(d_keys,h_keys,nk*32,cudaMemcpyHostToDevice);
@@ -395,6 +394,7 @@ int main(int argc,char **argv){
             }
         }
         total+=nk;
+        if((total%100000)==0){FILE *fcp=fopen("_checkpoint.txt","w");if(fcp){fprintf(fcp,"%lu\\n",total);fclose(fcp);}}
         if((total%(CHUNK*4))==0){
             fprintf(stderr,"\r[WATCH] %.3f M keys checked, %u hits",(double)total/1e6,found_total);
             fflush(stderr);
@@ -403,11 +403,12 @@ int main(int argc,char **argv){
     fprintf(stderr,"\n[DONE] %.3f M keys, %u found\n",(double)total/1e6,found_total);
     free(h_keys);free(h_comp);free(h_uncomp);free(ph);free(blm);
 #ifdef __CUDACC__
-    if(d_keys)cudaFree(d_keys);if(d_blm)cudaFree(d_blm);
+    if(d_keys)cudaFree(d_keys);if(d_cuckoo)cudaFree(d_cuckoo);
     if(d_found)cudaFree(d_found);if(d_nf)cudaFree(d_nf);
 #endif
     return 0;
 }
 #endif // __CUDACC__
+
 
 
