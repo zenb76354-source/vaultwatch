@@ -485,3 +485,94 @@ int main(int argc,char **argv){
 
 
 
+
+// ================================================================
+// STOP signal (found key ? halt generation)
+// ================================================================
+// When a key is found, the verifier sets a flag in host-pinned memory.
+// The generator (or integrated loop) checks this flag every N iterations.
+// Flag locations:
+//   g_stop_flag[0] = 0 (continue) or 1 (stop all generation)
+//   g_found_key[0] = index of found key
+//   g_found_h160[20] = matching hash160
+//
+// For pipeline mode: the signal is sent via a small file (STOP)
+// or Unix signal (SIGUSR1).
+// For integrated mode: atomicAdd on the n_found counter is enough
+// ? the generation loop checks if n_found > 0.
+
+// Host-pinned flag for cross-process signaling
+// Set by verifier, read by generator
+__device__ volatile int g_stop_flag = 0;
+
+// Check if we should stop generation
+D_FUNC int should_stop(void){
+#if defined(__CUDA_ARCH__)
+    return g_stop_flag;
+#else
+    // CPU: check file or flag
+    return 0;
+#endif
+}
+
+// ================================================================
+// VaultWatch Integrated ? Auto-pipeline (generation + verification)
+// ================================================================
+// Single-pass: generate keys, verify against targets, loop through modes.
+// On FOUND: create STOP file to signal seedhammer (or stop self).
+// No user intervention needed.
+
+int create_stop_signal(const char *path){
+    FILE *f = fopen(path, "w");
+    if(!f) return 0;
+    fprintf(f, "FOUND\n");
+    fclose(f);
+    return 1;
+}
+
+void run_verify_autocycle(void){
+    printf("VaultWatch auto-verify: single-pass generation + verification\n");
+    printf("Modes: H M R C J W B A D E L S T F G Q Y M2 R2 CQ LC RS Z K X\n");
+    printf("Target set: patoshi + main addresses\n");
+    printf("On FOUND: creates STOP file, saves key, continues next mode\n\n");
+
+    uint64_t ts_start = 1230768000; // 2009
+    uint64_t ts_end   = 1356998400; // 2012
+
+    const char *modes = "HMRCJWBADELSTFGQYM2R2CQLCRSZKX";
+    int num_modes = (int)strlen(modes);
+
+    for(int cycle = 0; cycle < 100; cycle++){
+        for(int m = 0; m < num_modes; m++){
+            char mode_char = modes[m];
+            printf("[Cycle %d] Mode %c ... ", cycle+1, mode_char);
+            fflush(stdout);
+
+            // Run integrated kernel for this mode
+            int found = run_integrated_mode(mode_char,
+                ts_start + (uint64_t)cycle * 86400,
+                ts_end,
+                "patoshi_h160.bin",
+                "found_keys.txt");
+
+            if(found > 0){
+                printf("FOUND %d key(s)! Creating STOP signal.\n", found);
+                create_stop_signal("STOP");
+                // Optionally continue searching more modes
+                // or exit here: return;
+            } else {
+                printf("0 found.\n");
+            }
+            fflush(stdout);
+        }
+        printf("[Cycle %d complete] Starting next cycle...\n\n", cycle+1);
+    }
+}
+
+int main(int argc, char *argv[]){
+    if(argc > 1 && (strcmp(argv[1],"AUTO")==0 || strcmp(argv[1],"ALL")==0)){
+        run_verify_autocycle();
+        return 0;
+    }
+    // ... original main (unchanged) ...
+}
