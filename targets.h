@@ -60,7 +60,12 @@ static const char *TARGET_ADDRS[NUM_TARGETS] = {
 };
 
 // Hash160 for each target (20 bytes)
+// GPU-visible via __constant__ when compiled with nvcc
+#ifdef __CUDACC__
+__device__ __constant__ uint8_t TARGET_H160[NUM_TARGETS][20] = {
+#else
 static const uint8_t TARGET_H160[NUM_TARGETS][20] = {
+#endif
     {0x2c,0xb6,0xb5,0x84,0x2f,0x9d,0x35,0x3e,0xf4,0x4b,0xb4,0x64,0x07,0xb0,0x3f,0xed,0x46,0x73,0xf4,0xaf},
     {0xb3,0x46,0xa3,0xbc,0xe0,0xe6,0xf5,0xe8,0xd0,0x1b,0x6a,0x73,0x9c,0x05,0x01,0x49,0x2d,0xd5,0xf5,0xeb},
     {0xac,0xd4,0x49,0xfe,0x2b,0x73,0x04,0xeb,0x89,0x50,0xd1,0x28,0xab,0xd4,0x5b,0x2f,0x57,0xaa,0xa3,0x16},
@@ -114,6 +119,7 @@ static const uint8_t TARGET_H160[NUM_TARGETS][20] = {
     {0x0c,0x48,0x11,0xa0,0x1b,0xf2,0xf6,0x89,0xa5,0xd8,0xda,0x76,0x71,0xd6,0xc2,0x6f,0x31,0x86,0x51,0x8b},
 };
 
+#ifndef __CUDACC__
 static const char *TARGET_LABELS[NUM_TARGETS] = {
     "N1","H1","H2","H3","H4","H5","H6","H7","H8","H9","H10",
     "H11","H12","H13","H14","H15","H16","H17","H18","H19","H20",
@@ -122,6 +128,7 @@ static const char *TARGET_LABELS[NUM_TARGETS] = {
     "H41","H42","H43","H44","H45","H46","H47","H48","H49","H50"
 };
 
+#ifndef __CUDACC__
 static const double TARGET_BALANCE[NUM_TARGETS] = {
     1400.98, 1260.0, 820.30, 693.7, 650.45, 500.0, 460.40, 430.9,
     430.31, 408.0, 403.25, 300.01, 290.0, 273.08, 256.32, 253.93,
@@ -131,5 +138,6 @@ static const double TARGET_BALANCE[NUM_TARGETS] = {
     168.70, 165.92, 165.2, 163.0, 161.97, 161.47, 161.0, 160.29,
     159.31, 155.91, 1400.98
 };
+#endif /* __CUDACC__ */
 
 #endif /* TARGETS_H */
