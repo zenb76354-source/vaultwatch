@@ -14,6 +14,7 @@
 #include "ec_jacobian.h"
 #include "targets.h"
 #include "patoshi_targets.h"
+#include "vaultwatch-host-data.cuh"
 
 // ================================================================
 // Constants
@@ -259,10 +260,10 @@ static void log_hit(uint32_t mode,const uint8_t pk[32],const uint8_t h[20],const
     const char *fmt=(mode==0)?"COMPRESSED":"UNCOMPRESSED";
     for(int t=0;t<NUM_TARGETS;t++){
         if(memcmp(h,TARGET_H160[t],20)==0){
-            printf("\n*** FOUND! [%s] %s (%s, %.0f BTC) ***\nprivkey: ",fmt,TARGET_LABELS[t],TARGET_ADDRS[t],TARGET_BALANCE[t]);
+            printf("\n*** FOUND! [%s] %s (%s, %.0f BTC) ***\nprivkey: ",fmt,TARGET_LABELS_HOST[t],TARGET_ADDRS[t],TARGET_BALANCE_HOST[t]);
             for(int i=0;i<32;i++)printf("%02x",pk[i]); printf("\n"); fflush(stdout);
             FILE *fl=fopen("found.txt","a");
-            if(fl){fprintf(fl,"[%s-%s] ",fmt,TARGET_LABELS[t]);for(int i=0;i<32;i++)fprintf(fl,"%02x",pk[i]);fprintf(fl," %.0f BTC\n",TARGET_BALANCE[t]);fclose(fl);}
+            if(fl){fprintf(fl,"[%s-%s] ",fmt,TARGET_LABELS_HOST[t]);for(int i=0;i<32;i++)fprintf(fl,"%02x",pk[i]);fprintf(fl," %.0f BTC\n",TARGET_BALANCE_HOST[t]);fclose(fl);}
             return;
         }
     }
