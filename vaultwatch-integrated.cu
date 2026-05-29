@@ -40,7 +40,7 @@ struct FoundEntry { uint8_t privkey[32]; uint32_t mode; uint8_t h160[20]; };
 #define sig0(x) (ROTR32(x,7)^ROTR32(x,18)^((x)>>3))
 #define sig1(x) (ROTR32(x,17)^ROTR32(x,19)^((x)>>10))
 
-static const uint32_t K256[64]={
+__device__ __constant__ uint32_t K256[64]={
     0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,
     0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
     0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,
@@ -112,8 +112,8 @@ __device__ void sha256(const uint8_t *m,uint32_t len,uint8_t h[32]){
 // RIPEMD-160 (from scratch, 5 rounds x 16 steps)
 // ================================================================
 #define ROL32(x,n) (((x)<<(n))|((x)>>(32-(n))))
-static const uint32_t RMD_K[5]={0x00000000,0x5a827999,0x6ed9eba1,0x8f1bbcdc,0xa953fd4e};
-static const uint32_t RMD_KP[5]={0x50a28be6,0x5c4dd124,0x6d703ef3,0x7a6d76e9,0x00000000};
+__device__ __constant__ uint32_t RMD_K[5]={0x00000000,0x5a827999,0x6ed9eba1,0x8f1bbcdc,0xa953fd4e};
+__device__ __constant__ uint32_t RMD_KP[5]={0x50a28be6,0x5c4dd124,0x6d703ef3,0x7a6d76e9,0x00000000};
 
 __device__ void ripemd160(const uint8_t in[64],uint8_t out[20]){
     uint32_t h[5]={0x67452301,0xefcdab89,0x98badcfe,0x10325476,0xc3d2e1f0},x[16];
