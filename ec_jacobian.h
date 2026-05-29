@@ -405,35 +405,4 @@ INLINE void privkey_to_pubkey_both(const uint8_t priv[32],
 // Only available on CUDA (__CUDACC__ + __CUDA_ARCH__)
 // Falls back to single-thread on CPU.
 
-#if defined(__CUDACC__) && defined(__CUDA_ARCH__)
 
-// Single Jacobian point addition step using warp collaboration
-// Thread with lane == bit_idx computes the contribution for that bit
-__device__ void point_mul_warp(const uint8_t privkey[32], uint8_t pubkey[33]){
-    int lane = threadIdx.x & 31;
-    
-    // Generator point (secp256k1 G)
-    uint32_t G_x[8], G_y[8], G_z[8]; // Jacobian coordinates
-    // ... load generator point ...
-    
-    // Result accumulator (start at infinity, use G for first set bit)
-    uint32_t R_x[8], R_y[8], R_z[8];
-    
-    // Each thread handles a specific bit slice using shfl
-    // Lane 0-7: lower 128 bits
-    // Lane 8-15: upper 128 bits  
-    // Lane 16-31: coordinate modulus reduction
-    
-    // Simplified: shfl-based Jacobian addition
-    // Each lane processes bit (lane) of the scalar
-    __syncthreads();
-    
-    // Broadcast result via lane 0
-    if(lane == 0){
-        // Convert Jacobian to affine
-        affine_from_jacobian(R_x, R_y, R_z, pubkey + 1);
-        pubkey[0] = 0x02 | (R_y[0] & 1); // compressed prefix
-    }
-}
-
-#endif // CUDA
