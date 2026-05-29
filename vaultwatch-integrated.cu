@@ -247,10 +247,7 @@ __global__ void vaultwatch_integrated_kernel(
 
 // ================================================================
 // HOST SIDE — Main entry point
-// (Hidden from nvcc to avoid TARGET_LABELS/TARGET_BALANCE CPU-only conflict; 
-//  when included into engine, main() is not needed)
 // ================================================================
-#ifndef __CUDACC__
 
 static bool patoshi_exact(const uint8_t *ph,uint32_t n,const uint8_t h[20]){
     int lo=0,hi=(int)n-1;
@@ -365,5 +362,3 @@ int main(int argc,char **argv){
     cudaFree(d_keys);cudaFree(d_cuckoo);cudaFree(d_found);cudaFree(d_nf);
     return 0;
 }
-
-#endif /* not __CUDACC__ (host-only section above) */
