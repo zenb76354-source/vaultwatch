@@ -128,7 +128,6 @@ static const char *TARGET_LABELS[NUM_TARGETS] = {
     "H41","H42","H43","H44","H45","H46","H47","H48","H49","H50"
 };
 
-#ifndef __CUDACC__
 static const double TARGET_BALANCE[NUM_TARGETS] = {
     1400.98, 1260.0, 820.30, 693.7, 650.45, 500.0, 460.40, 430.9,
     430.31, 408.0, 403.25, 300.01, 290.0, 273.08, 256.32, 253.93,
