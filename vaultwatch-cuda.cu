@@ -83,7 +83,7 @@ D_FUNC void sha256_compress(uint32_t state[8], const uint32_t block[16]) {
 }
 
 D_FUNC void sha256(const uint8_t *data, uint32_t len, uint8_t hash[32]) {
-    uint32_t state[8]={0x6a09e667,0xbb67ae85,0x36c8a04,0xa54ff53a,
+    uint32_t state[8]={0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,
                         0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19};
     uint32_t block[16];
     uint32_t pos=0;
@@ -167,15 +167,21 @@ D_FUNC void ripemd160(const uint8_t *data, uint32_t len, uint8_t hash[20]) {
         uint32_t ap=a,bp=b,cp=c,dp=d,ep=e;
 
         // 5 rounds, 16 steps each = 80 steps
+        // RIPEMD-160 functions (ISO/IEC 10118-3):
+        //   Round 0: f = x^y^z          (left), fp = x^(y|~z) = f5 (right)
+        //   Round 1: f = (x&y)|(~x&z)   (left), fp = (x&z)|(y&~z) = f4 (right)
+        //   Round 2: f = (x|~y)^z       (left), fp = x^y^z = f1 (right)
+        //   Round 3: f = (x&z)|(y&~z)   (left), fp = (x&y)|(~x&z) = f2 (right)
+        //   Round 4: f = x^(y|~z)       (left), fp = (x|~y)^z = f3 (right)
         for(int r=0;r<5;r++){
             for(int s=0;s<16;s++){
                 // Left side
                 uint32_t f;
-                if(r==0) f = (b & c) | (~b & d);
-                else if(r==1) f = (b ^ c ^ d);
-                else if(r==2) f = (c & ~d) | (b & d);
-                else if(r==3) f = (b & c) | (~b & d);
-                else f = b ^ (c | ~d);
+                if(r==0) f = (b ^ c ^ d);                              // f1
+                else if(r==1) f = (b & c) | (~b & d);                  // f2
+                else if(r==2) f = (b | ~c) ^ d;                        // f3
+                else if(r==3) f = (b & d) | (c & ~d);                  // f4
+                else f = b ^ (c | ~d);                                  // f5
 
                 uint32_t T = ROTL(a + f + block[ro[r][s]] + rk[r], rs[r][s]) + e;
                 // Rotate state
@@ -183,11 +189,11 @@ D_FUNC void ripemd160(const uint8_t *data, uint32_t len, uint8_t hash[20]) {
 
                 // Right side
                 uint32_t fp;
-                if(r==0) fp = bp ^ (cp | ~dp);
-                else if(r==1) fp = (bp & dp) | (cp & ~dp);
-                else if(r==2) fp = bp ^ cp ^ dp;
-                else if(r==3) fp = (cp & ~dp) | (bp & dp);
-                else fp = bp ^ (cp | ~dp);
+                if(r==0) fp = bp ^ (cp | ~dp);                          // fp1 = f5
+                else if(r==1) fp = (bp & dp) | (cp & ~dp);              // fp2 = f4
+                else if(r==2) fp = bp ^ cp ^ dp;                        // fp3 = f1
+                else if(r==3) fp = (bp & cp) | (~bp & dp);              // fp4 = f2
+                else fp = (bp | ~cp) ^ dp;                               // fp5 = f3
 
                 T = ROTL(ap + fp + block[rop[r][s]] + rkp[r], rsp[r][s]) + ep;
                 ep = dp; dp = ROTL(cp,10); cp = bp; bp = ap; ap = T;
@@ -218,11 +224,11 @@ D_FUNC void ripemd160(const uint8_t *data, uint32_t len, uint8_t hash[20]) {
         for(int r=0;r<5;r++){
             for(int s=0;s<16;s++){
                 uint32_t f, fp;
-                if(r==0){f=(b&c)|(~b&d); fp=bp^(cp|~dp);}
-                else if(r==1){f=b^c^d; fp=(bp&dp)|(cp&~dp);}
-                else if(r==2){f=(c&~d)|(b&d); fp=bp^cp^dp;}
-                else if(r==3){f=(b&c)|(~b&d); fp=(cp&~dp)|(bp&dp);}
-                else{f=b^(c|~d); fp=bp^(cp|~dp);}
+                if(r==0){f=b^c^d; fp=bp^(cp|~dp);}                         // f1, fp1=f5
+                else if(r==1){f=(b&c)|(~b&d); fp=(bp&dp)|(cp&~dp);}         // f2, fp2=f4
+                else if(r==2){f=(b|~c)^d; fp=bp^cp^dp;}                     // f3, fp3=f1
+                else if(r==3){f=(b&d)|(c&~d); fp=(bp&cp)|(~bp&dp);}         // f4, fp4=f2
+                else{f=b^(c|~d); fp=(bp|~cp)^dp;}                           // f5, fp5=f3
                 uint32_t T=ROTL(a+f+block[ro[r][s]]+rk[r],rs[r][s])+e;
                 e=d;d=ROTL(c,10);c=b;b=a;a=T;
                 T=ROTL(ap+fp+block[rop[r][s]]+rkp[r],rsp[r][s])+ep;
@@ -247,11 +253,11 @@ D_FUNC void ripemd160(const uint8_t *data, uint32_t len, uint8_t hash[20]) {
     for(int r=0;r<5;r++){
         for(int s=0;s<16;s++){
             uint32_t f, fp;
-            if(r==0){f=(b&c)|(~b&d); fp=bp^(cp|~dp);}
-            else if(r==1){f=b^c^d; fp=(bp&dp)|(cp&~dp);}
-            else if(r==2){f=(c&~d)|(b&d); fp=bp^cp^dp;}
-            else if(r==3){f=(b&c)|(~b&d); fp=(cp&~dp)|(bp&dp);}
-            else{f=b^(c|~d); fp=bp^(cp|~dp);}
+            if(r==0){f=b^c^d; fp=bp^(cp|~dp);}
+            else if(r==1){f=(b&c)|(~b&d); fp=(bp&dp)|(cp&~dp);}
+            else if(r==2){f=(b|~c)^d; fp=bp^cp^dp;}
+            else if(r==3){f=(b&d)|(c&~d); fp=(bp&cp)|(~bp&dp);}
+            else{f=b^(c|~d); fp=(bp|~cp)^dp;}
             uint32_t T=ROTL(a+f+block[ro[r][s]]+rk[r],rs[r][s])+e;
             e=d;d=ROTL(c,10);c=b;b=a;a=T;
             T=ROTL(ap+fp+block[rop[r][s]]+rkp[r],rsp[r][s])+ep;

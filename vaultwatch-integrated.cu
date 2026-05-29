@@ -140,7 +140,8 @@ __device__ void ripemd160(const uint8_t in[64],uint8_t out[20]){
             uint32_t t=ROL32(a+f+x[j]+RMD_K[r24],R[r][s%4])+e;
             a=e;e=d;d=ROL32(c,10);c=b;b=t;
             int jp=(r==0)?s:(r==1)?(s*3+5)%16:(r==2)?(s*7)%16:(r==3)?(s*5+1)%16:(s*3+1)%16;
-            int fp=(r24==0)?(bp^cp^dp):(r24==1)?((bp&cp)|(~bp&dp)):(r24==2)?((bp|~cp)^dp):(r24==3)?((bp&dp)|(cp&~dp)):(bp^(cp|~dp));
+            // Right side: fp1=f5, fp2=f4, fp3=f1, fp4=f2, fp5=f3
+            int fp=(r24==0)?(bp^(cp|~dp)):(r24==1)?((bp&dp)|(cp&~dp)):(r24==2)?(bp^cp^dp):(r24==3)?((bp&cp)|(~bp&dp)):((bp|~cp)^dp);
             uint32_t tp=ROL32(ap+fp+x[jp]+RMD_KP[r24],RP[r][s%4])+ep;
             ap=ep;ep=dp;dp=ROL32(cp,10);cp=bp;bp=tp;
         }
